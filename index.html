@@ -53,6 +53,13 @@ h1{font:800 clamp(22px,4vw,34px)/1.05 var(--display);margin:0;letter-spacing:-.0
 footer{color:var(--muted);font-size:11px;line-height:1.6}
 a{color:var(--real)}
 .err{color:var(--hot)}
+.sp[hidden]{display:none}
+.sp{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:10px}
+.sp h2{margin:0;font:700 15px/1.2 var(--display)} .sp .n{font-size:12px;color:var(--muted)}
+.sprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.spc{display:grid;gap:2px;min-width:0} .spc .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.spc .v{font:700 20px/1.1 var(--display);font-variant-numeric:tabular-nums} .spc svg{width:100%;height:28px;display:block}
+
 </style>
 </head>
 <body>
@@ -71,6 +78,8 @@ a{color:var(--real)}
   <section class="verdict" id="verdict"><b>Loading history…</b><span class="n">Fetching daily data since 2010.</span></section>
 
   <section class="cards" id="cards"></section>
+
+  <section class="sp" id="sparsity" hidden></section>
 
   <section class="chartbox">
     <h2>Price (log scale) and the "average price paid"</h2>
@@ -96,7 +105,7 @@ a{color:var(--real)}
 
   <footer>
     Daily data: Coin Metrics Community API (PriceUSD, CapMVRVCur, IssTotUSD, HashRate), refreshed on each visit. Live price: Coinbase Exchange feed.
-    Dollar rule and study notes: the fund's Bitcoin Science Ledger (fund.json, updated daily). Nothing here is advice or a trade signal. Each pattern rests on 3–4 past cycles.
+    Meme-market fear and greed: Sparsity (sparsitydata.com/sentiment), copied daily. Dollar rule and study notes: the fund's Bitcoin Science Ledger (fund.json, updated daily). Nothing here is advice or a trade signal. Each pattern rests on 3–4 past cycles.
     <div id="fundnote"></div>
   </footer>
 </div>
@@ -151,6 +160,15 @@ async function poll(){try{const r=await fetch("https://api.exchange.coinbase.com
 
 function card(k,v,n,state){return `<div class="card"><span class="k">${k}</span><span class="v">${v}</span><span class="n">${n}</span>${state?`<span class="pill ${state[0]}">${state[1]}</span>`:""}</div>`}
 
+
+function word(x){return x<20?["hot","Extreme fear"]:x<40?["warn","Fear"]:x<60?["ok","Neutral"]:x<80?["warn","Greed"]:["hot","Extreme greed"]}
+function spark(a){const w=100,h=28,n=a.length;if(n<2)return"";const pts=a.map((v,i)=>`${(i/(n-1)*w).toFixed(1)},${(h-(v/100)*h).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><line x1="0" y1="${h*0.8}" x2="${w}" y2="${h*0.8}" stroke="currentColor" stroke-opacity=".15"/><line x1="0" y1="${h*0.2}" x2="${w}" y2="${h*0.2}" stroke="currentColor" stroke-opacity=".15"/><polyline points="${pts}" fill="none" stroke="var(--btc)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`}
+function renderSparsity(sp){const el=$("sparsity");if(!sp||!sp.chains)return;
+  let h=`<h2>Meme-market fear and greed, by chain</h2><span class="n">0 = extreme fear, 100 = extreme greed. Read on-chain from launchpads, trading bots and holders by <a href="${sp.source}" target="_blank" rel="noopener">Sparsity</a>. Readings for ${sp.asOf}; line = last 30 days. Only one year of history exists, so no past-cycle record yet: the fund keeps a daily copy and tests it going forward.</span><div class="sprow">`;
+  sp.chains.forEach(c=>{const w=word(c.reading),d=c.weekAgo!=null?c.reading-c.weekAgo:null;
+    h+=`<div class="spc"><span class="k">${c.name}</span><span class="v">${fmt(c.reading,0)}</span><span class="pill ${w[0]}">${w[1]}</span><span class="n">${d==null?"":(d>=0?"+":"")+fmt(d,0)+" vs a week ago"}</span>${spark(c.series||[])}</div>`});
+  el.innerHTML=h+"</div>";el.hidden=false}
 async function main(){
   connectWS();
   // mining difficulty (mempool.space, free, CORS-open): past adjustments + the running estimate of the next one
@@ -224,6 +242,7 @@ async function main(){
     $("cards").innerHTML=html;
     const msg = nf===0?"No washout yet. None of the four bottom gauges is firing.":nf===1?"One of four bottom gauges is firing.":nf+" of four bottom gauges are firing — past bottoms looked like this.";
     $("verdict").innerHTML=`<b>${msg}</b><span class="n">Before all four past lows (2011, 2015, 2018, 2022), price was under the realized price, Puell was under 0.5, MVRV was near its drift line, and miners had capitulated within 90 days. A newer pair (study 27): two mining-difficulty drops in a row while price is under the realized price came before the 2011, 2015 and 2018 lows. This bear has been shallower than all of them, which fits the "each cycle is smaller" pattern; it may end without a full washout.</span>`;
+    renderSparsity(f.sparsity);
     if(f.updated_utc) $("fundnote").textContent="Fund data updated "+f.updated_utc+".";
   };
   window.__render();
