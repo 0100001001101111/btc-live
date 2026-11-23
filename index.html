@@ -80,17 +80,17 @@ a{color:var(--real)}
   </section>
   <section class="chartbox">
     <h2>MVRV: price ÷ average price paid</h2>
-    <p>Bottoms came in higher each cycle: 0.42 → 0.56 → 0.69 → 0.75. The dashed line is that drift carried forward (about 0.82 this cycle). Lowest so far this bear: 1.10.</p>
+    <p>Under 1.0 (price below the average price paid) came before all 4 bear lows, 25–81 days ahead, with 3 false alarms. The lows themselves read higher each cycle: 0.42 (2011) → 0.56 → 0.69 → 0.75 (2022). The dashed line is that drift carried forward (about 0.82 this cycle). Lowest so far this bear: 1.10.</p>
     <div class="chart" id="c2"></div>
   </section>
   <section class="chartbox">
     <h2>Puell multiple: miner income vs its yearly average</h2>
-    <p>The steadiest bottom gauge: 0.31, 0.31, 0.39 at the last three lows. Under 0.4 = miners in real pain.</p>
+    <p>Under 0.5 = miners earning less than half their usual income. It came before all 4 bear lows (25–83 days ahead), with about one false alarm every 18 months. The lows read 0.31, 0.31, 0.39, 0.48: rising, so the line may need to move up.</p>
     <div class="chart" id="c3"></div>
   </section>
   <section class="chartbox">
     <h2>Hash ribbon: 30-day ÷ 60-day hash rate</h2>
-    <p>Under 1.0 = miners switching machines off ("capitulation"). Every past bottom had one within 90 days, but most spells were not bottoms.</p>
+    <p>Under 1.0 = miners switching machines off ("capitulation"). It came before all 4 bear lows, but about 4 in 5 spells were not bottoms. When miners recover and price turns up (the "buy"), price was higher a year later 18 of 19 times.</p>
     <div class="chart" id="c4"></div>
   </section>
 
@@ -182,7 +182,7 @@ async function main(){
   ms.createPriceLine({price:0.82,color:css("--ok"),lineWidth:1,lineStyle:2,axisLabelVisible:true,title:"drift bottom ~0.82"});
   ms.createPriceLine({price:1,color:css("--muted"),lineWidth:1,lineStyle:1,axisLabelVisible:false,title:"1.0"});
   const c3=mkChart($("c3"),180,false); const ps=line(c3,css("--fg"),1); ps.setData(PU); markers(ps,PU);
-  ps.createPriceLine({price:0.4,color:css("--ok"),lineWidth:1,lineStyle:2,axisLabelVisible:true,title:"bottom zone 0.4"});
+  ps.createPriceLine({price:0.5,color:css("--ok"),lineWidth:1,lineStyle:2,axisLabelVisible:true,title:"bottom zone 0.5"});
   const c4=mkChart($("c4"),160,false); const hs=line(c4,css("--fg"),1); hs.setData(HB);
   hs.createPriceLine({price:1,color:css("--hot"),lineWidth:1,lineStyle:2,axisLabelVisible:true,title:"capitulation < 1"});
   const charts=[c1,c2,c3,c4]; let syncing=false;
@@ -193,14 +193,14 @@ async function main(){
   window.__render=function(){
     const p=live||P[P.length-1].value;
     const mvLive=p/realized;
-    const fired=[mvLive<=0.82, lastPU.value<0.4, p<realized, lastHB.value<1];
+    const fired=[mvLive<=0.82, lastPU.value<0.5, p<realized, lastHB.value<1];
     const nf=fired.filter(Boolean).length;
     const bearDays=days(TOP.d,new Date().toISOString().slice(0,10));
     const f=window.__fund||{};
     const st=x=>x?["hot","FIRING"]:["ok","not firing"];
     let html="";
     html+=card("MVRV now",fmt(mvLive,2),`Bear low so far ${fmt(mvMinBear,2)}. Drift bottom ≈0.82 = ${usd(realized*0.82)}`,st(fired[0]));
-    html+=card("Puell multiple",fmt(lastPU.value,2),`Past lows 0.31–0.39 · data ${lastPU.time}`,st(fired[1]));
+    html+=card("Puell multiple",fmt(lastPU.value,2),`Past lows 0.31–0.48 · fires under 0.5 · data ${lastPU.time}`,st(fired[1]));
     html+=card("Realized price",usd(realized),`Price is ${fmt((p/realized-1)*100,1)}% ${p>=realized?"above":"below"} it`,st(fired[2]));
     html+=card("Hash ribbon",fmt(lastHB.value,3),`30d ÷ 60d hash rate · data ${lastHB.time}`,st(fired[3]));
     html+=card("Retrace ladder",`${usd(retrace(.412))}–${usd(retrace(.352))}`,`0.382 band (2 of 3 bears). Next: ${usd(retrace(.53))}–${usd(retrace(.47))}`,p<=retrace(.352)&&p>=retrace(.412)?["warn","price inside band"]:null);
@@ -209,7 +209,7 @@ async function main(){
     if(f.dollar_rule){const d=f.dollar_rule;html+=card("Dollar rule",d.call==="DOWN"?"BTC down":"BTC up",`Dollar ${d.dxy_13w_change>0?"+":""}${fmt(d.dxy_13w_change*100,1)}% in 13 wks (${d.friday}) → reading to ${d.window_ends}. 70% right out of sample`,d.call==="DOWN"?["warn","headwind"]:["ok","tailwind"]);}
     $("cards").innerHTML=html;
     const msg = nf===0?"No washout yet. None of the four bottom gauges is firing.":nf===1?"One of four bottom gauges is firing.":nf+" of four bottom gauges are firing — past bottoms looked like this.";
-    $("verdict").innerHTML=`<b>${msg}</b><span class="n">At the 2015, 2018 and 2022 lows, MVRV was near its drift line, Puell was under 0.4, price was under the realized price, and miners had capitulated within 90 days. This bear has been shallower than all of them, which fits the "each cycle is smaller" pattern; it may end without a full washout.</span>`;
+    $("verdict").innerHTML=`<b>${msg}</b><span class="n">Before all four past lows (2011, 2015, 2018, 2022), price was under the realized price, Puell was under 0.5, MVRV was near its drift line, and miners had capitulated within 90 days. This bear has been shallower than all of them, which fits the "each cycle is smaller" pattern; it may end without a full washout.</span>`;
     if(f.updated_utc) $("fundnote").textContent="Fund data updated "+f.updated_utc+".";
   };
   window.__render();
