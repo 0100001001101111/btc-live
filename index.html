@@ -153,6 +153,10 @@ function card(k,v,n,state){return `<div class="card"><span class="k">${k}</span>
 
 async function main(){
   connectWS();
+  // mining difficulty (mempool.space, free, CORS-open): past adjustments + the running estimate of the next one
+  Promise.all([fetch("https://mempool.space/api/v1/mining/difficulty-adjustments/1y").then(r=>r.json()),
+               fetch("https://mempool.space/api/v1/difficulty-adjustment").then(r=>r.json())])
+    .then(([h,nx])=>{window.__diff={hist:h.map(a=>({d:new Date(a[0]*1000).toISOString().slice(0,10),ch:(a[3]-1)*100})),next:nx};if(window.__render)window.__render()}).catch(()=>{});
   fetch("fund.json",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(f=>{if(!f)return;window.__fund=f;if(window.__render)window.__render()}).catch(()=>{});
   let rows;
   try{rows=await getAll()}catch(e){$("verdict").innerHTML=`<b class="err">Could not load daily data.</b><span class="n">${e.message}. Reload in a minute.</span>`;return}
@@ -207,9 +211,19 @@ async function main(){
     html+=card("Four-year clock",`${bearDays} days`,`since the ${TOP.d} top. Past bears: 364–406 days. Bottom window Sep 2026 – Jan 2027`,null);
     html+=card("Long averages",`${usd(w50)} · ${usd(two)}`,`50-week (350-day) · 2-year. Back above the 2-year confirmed new bulls 3 of 3`,p>two?["ok","above 2-year"]:["warn","below both"]);
     if(f.dollar_rule){const d=f.dollar_rule;html+=card("Dollar rule",d.call==="DOWN"?"BTC down":"BTC up",`Dollar ${d.dxy_13w_change>0?"+":""}${fmt(d.dxy_13w_change*100,1)}% in 13 wks (${d.friday}) → reading to ${d.window_ends}. 70% right out of sample`,d.call==="DOWN"?["warn","headwind"]:["ok","tailwind"]);}
+    const D=window.__diff;
+    if(D&&D.hist.length>1){
+      const h=D.hist, a=h[0], b=h[1], dbl=a.ch<0&&b.ch<0;           // newest first
+      let lastDbl=null; for(let i=0;i<h.length-1;i++){if(h[i].ch<0&&h[i+1].ch<0){lastDbl=h[i].d;break}}
+      const nx=D.next, nxDate=new Date(nx.estimatedRetargetDate).toISOString().slice(0,10), nxCh=nx.difficultyChange;
+      const sgn=x=>(x>0?"+":"")+fmt(x,1)+"%";
+      const pair=dbl&&p<realized;
+      const state=pair?["hot","PAIR FIRING"]:dbl?["warn","miners giving up · price above cost"]:(a.ch<0&&nxCh<0&&p<realized)?["warn","could fire "+nxDate]:["ok","not firing"];
+      html+=card("Miner pair",`${sgn(b.ch)} · ${sgn(a.ch)}`,`Last two mining-difficulty changes (${b.d}, ${a.d}). Next ≈${nxDate}, running estimate ${sgn(nxCh)}. Fires when two drops in a row happen while price is under the realized price (${usd(realized)}): before the 2011, 2015 and 2018 lows, 1 false alarm in 14 years, missed 2022. Last double drop: ${lastDbl||"none in a year"}`,state);
+    }
     $("cards").innerHTML=html;
     const msg = nf===0?"No washout yet. None of the four bottom gauges is firing.":nf===1?"One of four bottom gauges is firing.":nf+" of four bottom gauges are firing — past bottoms looked like this.";
-    $("verdict").innerHTML=`<b>${msg}</b><span class="n">Before all four past lows (2011, 2015, 2018, 2022), price was under the realized price, Puell was under 0.5, MVRV was near its drift line, and miners had capitulated within 90 days. This bear has been shallower than all of them, which fits the "each cycle is smaller" pattern; it may end without a full washout.</span>`;
+    $("verdict").innerHTML=`<b>${msg}</b><span class="n">Before all four past lows (2011, 2015, 2018, 2022), price was under the realized price, Puell was under 0.5, MVRV was near its drift line, and miners had capitulated within 90 days. A newer pair (study 27): two mining-difficulty drops in a row while price is under the realized price came before the 2011, 2015 and 2018 lows. This bear has been shallower than all of them, which fits the "each cycle is smaller" pattern; it may end without a full washout.</span>`;
     if(f.updated_utc) $("fundnote").textContent="Fund data updated "+f.updated_utc+".";
   };
   window.__render();
