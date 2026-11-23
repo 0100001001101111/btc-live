@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bitcoin Washout Gauges</title>
+<meta name="description" content="Live Bitcoin price beside the on-chain gauges that marked every past bear-market bottom.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Archivo:wght@500;700;800&display=swap">
+<style>
+/* Layout: a control-room strip — live price on top, washout verdict cards, then four stacked time-synced charts. */
+:root{
+  --bg:#0d1014; --panel:#141a21; --line:#243039; --fg:#e7ecef; --muted:#8a99a6;
+  --btc:#f2a33a; --real:#5fb3ff; --band:rgba(242,163,58,.10); --band2:rgba(95,179,255,.08);
+  --ok:#47c98a; --warn:#e8c14a; --hot:#ff6b5e;
+  --display:"Archivo",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#f5f3ee; --panel:#ffffff; --line:#dcd8cf; --fg:#1b2026; --muted:#5f6b75;
+  --btc:#c76f00; --real:#1f6fc0; --band:rgba(199,111,0,.10); --band2:rgba(31,111,192,.08);
+  --ok:#1f8f5a; --warn:#9a7a00; --hot:#c8382c; color-scheme:light}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--mono);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font:800 clamp(22px,4vw,34px)/1.05 var(--display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:12px;margin-top:4px}
+.live{text-align:right}
+.price{font:700 clamp(30px,6vw,52px)/1 var(--display);font-variant-numeric:tabular-nums;color:var(--btc)}
+.tick{font-size:12px;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:middle}
+.dot.on{background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(71,201,138,.6)}70%{box-shadow:0 0 0 8px rgba(71,201,138,0)}100%{box-shadow:0 0 0 0 rgba(71,201,138,0)}}
+@media (prefers-reduced-motion: reduce){.dot.on{animation:none}}
+.verdict{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:6px}
+.verdict b{font:700 18px/1.2 var(--display)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:4px;min-width:0}
+.card .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.card .v{font:700 22px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.card .n{font-size:12px;color:var(--muted)}
+.pill{justify-self:start;font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid currentColor}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.hot{color:var(--hot)}
+.chartbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 10px 4px;min-width:0}
+.chartbox h2{font:700 15px/1.2 var(--display);margin:2px 4px 2px}
+.chartbox p{margin:0 4px 6px;color:var(--muted);font-size:12px}
+.chart{width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin:0 4px 6px;font-size:11px;color:var(--muted)}
+.sw{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px}
+footer{color:var(--muted);font-size:11px;line-height:1.6}
+a{color:var(--real)}
+.err{color:var(--hot)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Bitcoin Washout Gauges</h1>
+      <div class="sub">Live price beside the gauges that lit up at every past bear-market bottom. Patterns, not proof.</div>
+    </div>
+    <div class="live">
+      <div class="price" id="px">$—</div>
+      <div class="tick"><span class="dot" id="dot"></span><span id="pxnote">connecting to live feed…</span></div>
+    </div>
+  </header>
+
+  <section class="verdict" id="verdict"><b>Loading history…</b><span class="n">Fetching daily data since 2010.</span></section>
+
+  <section class="cards" id="cards"></section>
+
+  <section class="chartbox">
+    <h2>Price (log scale) and the "average price paid"</h2>
+    <p>Orange is BTC. Blue is the realized price: the average price every coin last moved at. Past bear lows went under it. Shaded bands are the retrace ladder: the 2018 and 2022 lows erased 0.382 and 0.5 of the bull's gain.</p>
+    <div class="legend"><span><i class="sw" style="background:var(--btc)"></i>BTC</span><span><i class="sw" style="background:var(--real)"></i>Realized price</span><span><i class="sw" style="background:var(--muted)"></i>June 30 low close</span></div>
+    <div class="chart" id="c1"></div>
+  </section>
+  <section class="chartbox">
+    <h2>MVRV: price ÷ average price paid</h2>
+    <p>Bottoms came in higher each cycle: 0.42 → 0.56 → 0.69 → 0.75. The dashed line is that drift carried forward (about 0.82 this cycle). Lowest so far this bear: 1.10.</p>
+    <div class="chart" id="c2"></div>
+  </section>
+  <section class="chartbox">
+    <h2>Puell multiple: miner income vs its yearly average</h2>
+    <p>The steadiest bottom gauge: 0.31, 0.31, 0.39 at the last three lows. Under 0.4 = miners in real pain.</p>
+    <div class="chart" id="c3"></div>
+  </section>
+  <section class="chartbox">
+    <h2>Hash ribbon: 30-day ÷ 60-day hash rate</h2>
+    <p>Under 1.0 = miners switching machines off ("capitulation"). Every past bottom had one within 90 days, but most spells were not bottoms.</p>
+    <div class="chart" id="c4"></div>
+  </section>
+
+  <footer>
+    Daily data: Coin Metrics Community API (PriceUSD, CapMVRVCur, IssTotUSD, HashRate), refreshed on each visit. Live price: Coinbase Exchange feed.
+    Dollar rule and study notes: the fund's Bitcoin Science Ledger (fund.json, updated daily). Nothing here is advice or a trade signal. Each pattern rests on 3–4 past cycles.
+    <div id="fundnote"></div>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(function(){
+const CM="https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=PriceUSD,CapMVRVCur,IssTotUSD,HashRate&frequency=1d&page_size=10000&start_time=2010-07-18&paging_from=start";
+const TOP={d:"2025-10-06",p:124824}, PRIOR_LOW=15758, JUNE_LOW=58525;
+const BOTTOMS=["2011-11-18","2015-01-14","2018-12-15","2022-11-09"], TOPS=["2011-06-08","2013-12-04","2017-12-16","2021-11-08","2025-10-06"];
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt=(x,d=0)=>x==null||isNaN(x)?"—":x.toLocaleString("en-US",{maximumFractionDigits:d,minimumFractionDigits:d});
+const usd=x=>"$"+fmt(x,0);
+const $=id=>document.getElementById(id);
+
+async function getAll(){
+  let url=CM, rows=[];
+  while(url){const r=await fetch(url); if(!r.ok) throw new Error("Coin Metrics "+r.status); const j=await r.json(); rows=rows.concat(j.data); url=j.next_page_url||null;}
+  return rows;
+}
+function sma(a,n){const o=new Array(a.length).fill(null);let s=0,c=0;for(let i=0;i<a.length;i++){const x=a[i];if(x!=null){s+=x;c++}if(i>=n){const y=a[i-n];if(y!=null){s-=y;c--}}if(i>=n-1&&c===n)o[i]=s/n}return o}
+function retrace(f){const lt=Math.log(TOP.p),g=lt-Math.log(PRIOR_LOW);return Math.exp(lt-f*g)}
+const days=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+
+function mkChart(el,h,log){
+  const c=LightweightCharts.createChart(el,{height:h,layout:{background:{type:"solid",color:"transparent"},textColor:css("--muted"),fontFamily:"IBM Plex Mono, monospace",fontSize:11},
+    grid:{vertLines:{color:css("--line")},horzLines:{color:css("--line")}},rightPriceScale:{mode:log?1:0,borderColor:css("--line")},
+    timeScale:{borderColor:css("--line")},crosshair:{mode:0},handleScroll:true,handleScale:true});
+  new ResizeObserver(()=>c.applyOptions({width:el.clientWidth})).observe(el);c.applyOptions({width:el.clientWidth});
+  return c;
+}
+function line(c,color,w,style){return c.addLineSeries({color,lineWidth:Math.round(w||2),lineStyle:style||0,priceLineVisible:false,lastValueVisible:true})}
+function markers(s,data){const set=new Set(data.map(p=>p.time));const m=[];
+  BOTTOMS.forEach(d=>{if(set.has(d))m.push({time:d,position:"belowBar",color:css("--ok"),shape:"arrowUp",text:"low"})});
+  TOPS.forEach(d=>{if(set.has(d))m.push({time:d,position:"aboveBar",color:css("--hot"),shape:"arrowDown",text:"top"})});
+  s.setMarkers(m.sort((a,b)=>a.time<b.time?-1:1));}
+
+let priceSeries=null, lastDay=null, live=null;
+function setLive(p,src){live=p;$("px").textContent=usd(p);$("pxnote").textContent=src+" · "+new Date().toLocaleTimeString();
+  if(priceSeries&&lastDay){const today=new Date().toISOString().slice(0,10);priceSeries.update({time:today>lastDay?today:lastDay,value:p});}
+  if(window.__render) window.__render();}
+
+function connectWS(){
+  let ws; try{ws=new WebSocket("wss://ws-feed.exchange.coinbase.com")}catch(e){return poll()}
+  let last=0;
+  ws.onopen=()=>{ws.send(JSON.stringify({type:"subscribe",product_ids:["BTC-USD"],channels:["ticker"]}));$("dot").classList.add("on")};
+  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==="ticker"&&m.price){const now=Date.now();if(now-last>700){last=now;setLive(+m.price,"Coinbase live")}}};
+  ws.onclose=()=>{$("dot").classList.remove("on");setTimeout(connectWS,5000)};
+  ws.onerror=()=>{try{ws.close()}catch(e){}};
+}
+async function poll(){try{const r=await fetch("https://api.exchange.coinbase.com/products/BTC-USD/ticker");const j=await r.json();setLive(+j.price,"Coinbase (polled)")}catch(e){}setTimeout(poll,15000)}
+
+function card(k,v,n,state){return `<div class="card"><span class="k">${k}</span><span class="v">${v}</span><span class="n">${n}</span>${state?`<span class="pill ${state[0]}">${state[1]}</span>`:""}</div>`}
+
+async function main(){
+  connectWS();
+  fetch("fund.json",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(f=>{if(!f)return;window.__fund=f;if(window.__render)window.__render()}).catch(()=>{});
+  let rows;
+  try{rows=await getAll()}catch(e){$("verdict").innerHTML=`<b class="err">Could not load daily data.</b><span class="n">${e.message}. Reload in a minute.</span>`;return}
+  const t=rows.map(r=>r.time.slice(0,10)), px=rows.map(r=>r.PriceUSD?+r.PriceUSD:null), mv=rows.map(r=>r.CapMVRVCur?+r.CapMVRVCur:null),
+        iss=rows.map(r=>r.IssTotUSD?+r.IssTotUSD:null), hr=rows.map(r=>r.HashRate?+r.HashRate:null);
+  const issAvg=sma(iss,365), hr30=sma(hr,30), hr60=sma(hr,60), ma730=sma(px,730), ma350=sma(px,350);
+  const P=[],R=[],M=[],PU=[],HB=[];
+  for(let i=0;i<t.length;i++){
+    if(px[i]!=null)P.push({time:t[i],value:px[i]});
+    if(px[i]!=null&&mv[i])R.push({time:t[i],value:px[i]/mv[i]});
+    if(mv[i])M.push({time:t[i],value:mv[i]});
+    if(iss[i]!=null&&issAvg[i])PU.push({time:t[i],value:iss[i]/issAvg[i]});
+    if(hr30[i]&&hr60[i])HB.push({time:t[i],value:hr30[i]/hr60[i]});
+  }
+  lastDay=P[P.length-1].time;
+  const lastM=M[M.length-1], lastPU=PU[PU.length-1], lastHB=HB[HB.length-1], lastR=R[R.length-1];
+  const realized=lastR.value, mvMinBear=Math.min(...M.filter(x=>x.time>=TOP.d).map(x=>x.value));
+  const i730=ma730.length-1, two=ma730[i730], w50=ma350[i730];
+
+  // charts
+  const c1=mkChart($("c1"),360,true); priceSeries=line(c1,css("--btc"),2); priceSeries.setData(P); markers(priceSeries,P);
+  const rs=line(c1,css("--real"),1); rs.setData(R);
+  const from=TOP.d; const bandData=(f)=>P.filter(p=>p.time>=from).map(p=>({time:p.time,value:retrace(f)}));
+  [[.352,"0.382 band"],[.412,""],[.47,"0.5 band"],[.53,""]].forEach(([f,lab],k)=>{const s=c1.addLineSeries({color:k<2?css("--btc"):css("--real"),lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:!!lab,title:lab});s.setData(bandData(f))});
+  priceSeries.createPriceLine({price:JUNE_LOW,color:css("--muted"),lineWidth:1,lineStyle:1,axisLabelVisible:true,title:"June low"});
+  const c2=mkChart($("c2"),200,false); const ms=line(c2,css("--fg"),1); ms.setData(M); markers(ms,M);
+  ms.createPriceLine({price:0.82,color:css("--ok"),lineWidth:1,lineStyle:2,axisLabelVisible:true,title:"drift bottom ~0.82"});
+  ms.createPriceLine({price:1,color:css("--muted"),lineWidth:1,lineStyle:1,axisLabelVisible:false,title:"1.0"});
+  const c3=mkChart($("c3"),180,false); const ps=line(c3,css("--fg"),1); ps.setData(PU); markers(ps,PU);
+  ps.createPriceLine({price:0.4,color:css("--ok"),lineWidth:1,lineStyle:2,axisLabelVisible:true,title:"bottom zone 0.4"});
+  const c4=mkChart($("c4"),160,false); const hs=line(c4,css("--fg"),1); hs.setData(HB);
+  hs.createPriceLine({price:1,color:css("--hot"),lineWidth:1,lineStyle:2,axisLabelVisible:true,title:"capitulation < 1"});
+  const charts=[c1,c2,c3,c4]; let syncing=false;
+  charts.forEach(c=>c.timeScale().subscribeVisibleLogicalRangeChange(()=>{if(syncing)return;syncing=true;const r=c.timeScale().getVisibleRange();if(r)charts.forEach(o=>{if(o!==c){try{o.timeScale().setVisibleRange(r)}catch(e){}}});syncing=false}));
+  const start=new Date(Date.now()-4*365*864e5).toISOString().slice(0,10);
+  c1.timeScale().setVisibleRange({from:start,to:lastDay});
+
+  window.__render=function(){
+    const p=live||P[P.length-1].value;
+    const mvLive=p/realized;
+    const fired=[mvLive<=0.82, lastPU.value<0.4, p<realized, lastHB.value<1];
+    const nf=fired.filter(Boolean).length;
+    const bearDays=days(TOP.d,new Date().toISOString().slice(0,10));
+    const f=window.__fund||{};
+    const st=x=>x?["hot","FIRING"]:["ok","not firing"];
+    let html="";
+    html+=card("MVRV now",fmt(mvLive,2),`Bear low so far ${fmt(mvMinBear,2)}. Drift bottom ≈0.82 = ${usd(realized*0.82)}`,st(fired[0]));
+    html+=card("Puell multiple",fmt(lastPU.value,2),`Past lows 0.31–0.39 · data ${lastPU.time}`,st(fired[1]));
+    html+=card("Realized price",usd(realized),`Price is ${fmt((p/realized-1)*100,1)}% ${p>=realized?"above":"below"} it`,st(fired[2]));
+    html+=card("Hash ribbon",fmt(lastHB.value,3),`30d ÷ 60d hash rate · data ${lastHB.time}`,st(fired[3]));
+    html+=card("Retrace ladder",`${usd(retrace(.412))}–${usd(retrace(.352))}`,`0.382 band (2 of 3 bears). Next: ${usd(retrace(.53))}–${usd(retrace(.47))}`,p<=retrace(.352)&&p>=retrace(.412)?["warn","price inside band"]:null);
+    html+=card("Four-year clock",`${bearDays} days`,`since the ${TOP.d} top. Past bears: 364–406 days. Bottom window Sep 2026 – Jan 2027`,null);
+    html+=card("Long averages",`${usd(w50)} · ${usd(two)}`,`50-week (350-day) · 2-year. Back above the 2-year confirmed new bulls 3 of 3`,p>two?["ok","above 2-year"]:["warn","below both"]);
+    if(f.dollar_rule){const d=f.dollar_rule;html+=card("Dollar rule",d.call==="DOWN"?"BTC down":"BTC up",`Dollar ${d.dxy_13w_change>0?"+":""}${fmt(d.dxy_13w_change*100,1)}% in 13 wks (${d.friday}) → reading to ${d.window_ends}. 70% right out of sample`,d.call==="DOWN"?["warn","headwind"]:["ok","tailwind"]);}
+    $("cards").innerHTML=html;
+    const msg = nf===0?"No washout yet. None of the four bottom gauges is firing.":nf===1?"One of four bottom gauges is firing.":nf+" of four bottom gauges are firing — past bottoms looked like this.";
+    $("verdict").innerHTML=`<b>${msg}</b><span class="n">At the 2015, 2018 and 2022 lows, MVRV was near its drift line, Puell was under 0.4, price was under the realized price, and miners had capitulated within 90 days. This bear has been shallower than all of them, which fits the "each cycle is smaller" pattern; it may end without a full washout.</span>`;
+    if(f.updated_utc) $("fundnote").textContent="Fund data updated "+f.updated_utc+".";
+  };
+  window.__render();
+}
+main();
+})();
+</script>
+</body>
+</html>

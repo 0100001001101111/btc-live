@@ -1,0 +1,10 @@
+{
+ "updated_utc": "2026-11-23 01:30Z",
+ "dollar_rule": {
+  "friday": "2026-11-20",
+  "call": "DOWN",
+  "dxy_13w_change": 0.0495,
+  "dxy": 103.80999755859375,
+  "window_ends": "2027-02-19"
+ }
+}
