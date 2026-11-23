@@ -54,6 +54,7 @@ footer{color:var(--muted);font-size:11px;line-height:1.6}
 a{color:var(--real)}
 .err{color:var(--hot)}
 .sp[hidden]{display:none}
+.card svg{width:100%;height:28px;display:block;margin-top:4px}
 .sp{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:10px}
 .sp h2{margin:0;font:700 15px/1.2 var(--display)} .sp .n{font-size:12px;color:var(--muted)}
 .sprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
@@ -162,8 +163,8 @@ function card(k,v,n,state){return `<div class="card"><span class="k">${k}</span>
 
 
 function word(x){return x<20?["hot","Extreme fear"]:x<40?["warn","Fear"]:x<60?["ok","Neutral"]:x<80?["warn","Greed"]:["hot","Extreme greed"]}
-function spark(a){const w=100,h=28,n=a.length;if(n<2)return"";const pts=a.map((v,i)=>`${(i/(n-1)*w).toFixed(1)},${(h-(v/100)*h).toFixed(1)}`).join(" ");
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><line x1="0" y1="${h*0.8}" x2="${w}" y2="${h*0.8}" stroke="currentColor" stroke-opacity=".15"/><line x1="0" y1="${h*0.2}" x2="${w}" y2="${h*0.2}" stroke="currentColor" stroke-opacity=".15"/><polyline points="${pts}" fill="none" stroke="var(--btc)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`}
+function spark(a,g){g=g||[20,80];const w=100,h=28,n=a.length;if(n<2)return"";const pts=a.map((v,i)=>`${(i/(n-1)*w).toFixed(1)},${(h-(v/100)*h).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${g.map(v=>`<line x1="0" y1="${h-(v/100)*h}" x2="${w}" y2="${h-(v/100)*h}" stroke="currentColor" stroke-opacity=".15"/>`).join("")}<polyline points="${pts}" fill="none" stroke="var(--btc)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`}
 function renderSparsity(sp){const el=$("sparsity");if(!sp||!sp.chains)return;
   let h=`<h2>Meme-market fear and greed, by chain</h2><span class="n">0 = extreme fear, 100 = extreme greed. Read on-chain from launchpads, trading bots and holders by <a href="${sp.source}" target="_blank" rel="noopener">Sparsity</a>. Readings for ${sp.asOf}; line = last 30 days. Only one year of history exists, so no past-cycle record yet: the fund keeps a daily copy and tests it going forward.</span><div class="sprow">`;
   sp.chains.forEach(c=>{const w=word(c.reading),d=c.weekAgo!=null?c.reading-c.weekAgo:null;
@@ -229,6 +230,8 @@ async function main(){
     html+=card("Four-year clock",`${bearDays} days`,`since the ${TOP.d} top. Past bears: 364–406 days. Bottom window Sep 2026 – Jan 2027`,null);
     html+=card("Long averages",`${usd(w50)} · ${usd(two)}`,`50-week (350-day) · 2-year. Back above the 2-year confirmed new bulls 3 of 3`,p>two?["ok","above 2-year"]:["warn","below both"]);
     if(f.dollar_rule){const d=f.dollar_rule;html+=card("Dollar rule",d.call==="DOWN"?"BTC down":"BTC up",`Dollar ${d.dxy_13w_change>0?"+":""}${fmt(d.dxy_13w_change*100,1)}% in 13 wks (${d.friday}) → reading to ${d.window_ends}. 70% right out of sample`,d.call==="DOWN"?["warn","headwind"]:["ok","tailwind"]);}
+    if(f.alt_breadth){const b=f.alt_breadth,v=b.latest*100;
+      html+=card("Alt-coin breadth",fmt(v,0)+"%",`Share of the top ${b.members} alt coins above their own 200-day average (${b.asOf}). 90%+ came before the 2017, 2021 and 2025 tops but also at ordinary rallies; 10% or less came before the 2018 and 2022 lows but also at other dips. Line: last year, guides at 10% and 90%`+spark(b.series,[10,90]),v<=10?["hot","alt capitulation zone"]:v>=90?["hot","alt mania zone"]:["ok","middle"]);}
     const D=window.__diff;
     if(D&&D.hist.length>1){
       const h=D.hist, a=h[0], b=h[1], dbl=a.ch<0&&b.ch<0;           // newest first
