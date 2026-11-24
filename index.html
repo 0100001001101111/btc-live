@@ -105,7 +105,7 @@ a{color:var(--real)}
   </section>
 
   <footer>
-    Daily data: Coin Metrics Community API (PriceUSD, CapMVRVCur, IssTotUSD, HashRate), refreshed on each visit. Live price: Coinbase Exchange feed.
+    Daily data: Coin Metrics Community API (PriceUSD, CapMVRVCur, IssTotUSD, HashRate, FeeTotNtv, reported spot volume), refreshed on each visit. Live price: Coinbase Exchange feed.
     Meme-market fear and greed: Sparsity (sparsitydata.com/sentiment), copied daily. Dollar rule and study notes: the fund's Bitcoin Science Ledger (fund.json, updated daily). Nothing here is advice or a trade signal. Each pattern rests on 3–4 past cycles.
     <div id="fundnote"></div>
   </footer>
@@ -114,7 +114,7 @@ a{color:var(--real)}
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 (function(){
-const CM="https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=PriceUSD,CapMVRVCur,IssTotUSD,HashRate&frequency=1d&page_size=10000&start_time=2010-07-18&paging_from=start";
+const CM="https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=PriceUSD,CapMVRVCur,IssTotUSD,HashRate,FeeTotNtv,volume_reported_spot_usd_1d&frequency=1d&page_size=10000&start_time=2010-07-18&paging_from=start";
 const TOP={d:"2025-10-06",p:124824}, PRIOR_LOW=15758, JUNE_LOW=58525;
 const BOTTOMS=["2011-11-18","2015-01-14","2018-12-15","2022-11-09"], TOPS=["2011-06-08","2013-12-04","2017-12-16","2021-11-08","2025-10-06"];
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -181,6 +181,7 @@ async function main(){
   try{rows=await getAll()}catch(e){$("verdict").innerHTML=`<b class="err">Could not load daily data.</b><span class="n">${e.message}. Reload in a minute.</span>`;return}
   const t=rows.map(r=>r.time.slice(0,10)), px=rows.map(r=>r.PriceUSD?+r.PriceUSD:null), mv=rows.map(r=>r.CapMVRVCur?+r.CapMVRVCur:null),
         iss=rows.map(r=>r.IssTotUSD?+r.IssTotUSD:null), hr=rows.map(r=>r.HashRate?+r.HashRate:null);
+  const fee=rows.map(r=>r.FeeTotNtv?+r.FeeTotNtv:null), vol=rows.map(r=>r.volume_reported_spot_usd_1d?+r.volume_reported_spot_usd_1d:null);
   const issAvg=sma(iss,365), hr30=sma(hr,30), hr60=sma(hr,60), ma730=sma(px,730), ma350=sma(px,350);
   const P=[],R=[],M=[],PU=[],HB=[];
   for(let i=0;i<t.length;i++){
@@ -192,6 +193,14 @@ async function main(){
   }
   lastDay=P[P.length-1].time;
   const lastM=M[M.length-1], lastPU=PU[PU.length-1], lastHB=HB[HB.length-1], lastR=R[R.length-1];
+  // study 29 gauges: miner income multiple (30-day / 365-day mean of new coins + fees in USD) and close / 155-day volume-weighted price
+  const mr=px.map((x,i)=>x!=null&&iss[i]!=null&&fee[i]!=null?iss[i]+fee[i]*x:null), mr30=sma(mr,30), mr365=sma(mr,365);
+  let MRm=null; for(let i=t.length-1;i>=0;i--){if(mr30[i]&&mr365[i]){MRm={time:t[i],value:mr30[i]/mr365[i]};break}}
+  const vwAt=i=>{let a=0,b=0,c=0;for(let k=i-154;k<=i;k++){if(k<0)return null;if(px[k]!=null&&vol[k]!=null){a+=px[k]*vol[k];b+=vol[k];c++}}return c>=140&&b>0?a/b:null};
+  let VW=null;{let iL=px.length-1;while(iL>0&&px[iL]==null)iL--;
+    const s2=i=>{const v=vwAt(i);return v&&px[i]!=null?px[i]/v:null};
+    const prior=[];for(let i=iL-1460;i<iL;i++){const x=s2(i);if(x!=null)prior.push(x)}
+    const vNow=vwAt(iL);if(vNow&&prior.length>=1314){prior.sort((a,b)=>a-b);const lvl=prior[Math.floor(0.05*prior.length)];VW={vw:vNow,level:lvl,fire:lvl*vNow,time:t[iL]}}}
   const realized=lastR.value, mvMinBear=Math.min(...M.filter(x=>x.time>=TOP.d).map(x=>x.value));
   const i730=ma730.length-1, two=ma730[i730], w50=ma350[i730];
 
@@ -229,6 +238,9 @@ async function main(){
     html+=card("Retrace ladder",`${usd(retrace(.412))}–${usd(retrace(.352))}`,`0.382 band (2 of 3 bears). Next: ${usd(retrace(.53))}–${usd(retrace(.47))}`,p<=retrace(.352)&&p>=retrace(.412)?["warn","price inside band"]:null);
     html+=card("Four-year clock",`${bearDays} days`,`since the ${TOP.d} top. Past bears: 364–406 days. Bottom window Sep 2026 – Jan 2027`,null);
     html+=card("Long averages",`${usd(w50)} · ${usd(two)}`,`50-week (350-day) · 2-year. Back above the 2-year confirmed new bulls 3 of 3`,p>two?["ok","above 2-year"]:["warn","below both"]);
+    if(VW){const r=p/VW.vw, on=p<=VW.fire;
+      html+=card("Volume-weighted price",usd(VW.vw),`155-day average price weighted by trading volume (${VW.time}). Price is ${fmt(Math.abs(r-1)*100,1)}% ${r>=1?"above":"below"} it. Fires when price falls into the lowest 5% of the last 4 years against it: now a price under ${usd(VW.fire)}. Came before the 2018 low; missed 2015 and 2022; about 0.7 false alarms a year (study 29, WEAK)`,on?["hot","FIRING"]:p<=VW.fire*1.05?["warn","within 5% of firing"]:["ok","not firing"]);}
+    if(MRm){html+=card("Miner income",fmt(MRm.value,2),`Miners' last 30 days of income (new coins plus fees) ÷ their 365-day average · data ${MRm.time}. Under 0.5 came before the 2011 and 2018 lows with 1 false alarm in 15 years; missed 2015 and 2022 (study 29, WEAK)`,MRm.value<0.5?["hot","FIRING"]:MRm.value<0.6?["warn","near"]:["ok","not firing"]);}
     if(f.dollar_rule){const d=f.dollar_rule;html+=card("Dollar rule",d.call==="DOWN"?"BTC down":"BTC up",`Dollar ${d.dxy_13w_change>0?"+":""}${fmt(d.dxy_13w_change*100,1)}% in 13 wks (${d.friday}) → reading to ${d.window_ends}. 70% right out of sample`,d.call==="DOWN"?["warn","headwind"]:["ok","tailwind"]);}
     if(f.alt_breadth){const b=f.alt_breadth,v=b.latest*100;
       html+=card("Alt-coin breadth",fmt(v,0)+"%",`Share of the top ${b.members} alt coins above their own 200-day average (${b.asOf}). 90%+ came before the 2017, 2021 and 2025 tops but also at ordinary rallies; 10% or less came before the 2018 and 2022 lows but also at other dips. Line: last year, guides at 10% and 90%`+spark(b.series,[10,90]),v<=10?["hot","alt capitulation zone"]:v>=90?["hot","alt mania zone"]:["ok","middle"]);}
